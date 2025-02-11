@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>Board Game Guesser</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <link rel='stylesheet' type='text/css' media='screen' href='main.css'>
+    <script src='main.js'></script>
+</head>
+<body>
+    <div class="header">
+        <h1>Board Game Guesser</h1>
+        <p>Проверка на дубликаты.</p>
+    </div>
+
+    <div class="data">
+        <textarea id="input" placeholder="Вставьте сохранённую базу данных."></textarea>
+    </div>
+
+    <div class="input">
+        <div class="check">
+            <p>Введите название настолки для проверки.</p>
+            <p>Название нужно полностью скопировать с Board Game Geek.</p>
+            <input type="text" id="gameToCheck" placeholder="Название настолки">
+            <button onclick="check()">Проверить</button>
+        </div>
+        
+        <div class="add">
+            <p>Введите название настолки для добавления.</p>
+            <p>Название нужно полностью скопировать с Board Game Geek.</p>
+            <input type="text" id="gameToAdd" placeholder="Название настолки">
+            <button onclick="add()">Добавить</button>
+        </div>
+    </div>
+</body>
+</html>
