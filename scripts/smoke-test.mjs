@@ -1,13 +1,13 @@
 /**
  * End-to-end smoke test against a running `wrangler dev`.
  *
- * Usage: node scripts/smoke-test.mjs [baseUrl] [passphrase]
+ * Usage: node scripts/smoke-test.mjs [baseUrl] [password]
  */
 
 import { createHash } from 'node:crypto';
 
 const baseUrl = process.argv[2] ?? 'http://127.0.0.1:8787';
-const passphrase = process.argv[3] ?? 'local-test-passphrase';
+const password = process.argv[3] ?? 'local-test-password';
 
 let failures = 0;
 
@@ -33,7 +33,7 @@ function hashName(name) {
     return createHash('sha256').update(normalised, 'utf8').digest('hex');
 }
 
-async function call(path, { method = 'GET', body, auth = passphrase } = {}) {
+async function call(path, { method = 'GET', body, auth = password } = {}) {
     const response = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
@@ -47,14 +47,14 @@ async function call(path, { method = 'GET', body, auth = passphrase } = {}) {
     return { status: response.status, payload };
 }
 
-const hash = hashName(`Test Game ${Date.now()}`);
+const hash = hashName(`Тестовая игра ${Date.now()}`);
 
 // Static assets and authentication.
 const page = await fetch(`${baseUrl}/`);
-check('serves the page', page.status === 200 && (await page.text()).includes('Board Game Gift Register'));
+check('serves the page', page.status === 200 && (await page.text()).includes('Реестр подарков'));
 
-check('rejects a missing passphrase', (await call('/api/stats', { auth: null })).status === 401);
-check('rejects a wrong passphrase', (await call('/api/stats', { auth: 'nope' })).status === 401);
+check('rejects a missing password', (await call('/api/stats', { auth: null })).status === 401);
+check('rejects a wrong password', (await call('/api/stats', { auth: 'nope' })).status === 401);
 check('rejects an unknown route', (await call('/api/nonsense')).status === 404);
 
 const before = await call('/api/stats');
@@ -68,36 +68,44 @@ check(
     (await call('/api/entries', { method: 'POST', body: { hash, comment: 'x'.repeat(201) } })).status === 400,
 );
 
+// Removing something that was never registered.
+const missing = await call('/api/entries', { method: 'DELETE', body: { hash } });
+check('refuses to remove an unregistered game', missing.status === 404, missing.payload);
+
 // A game nobody has registered.
 const free = await call('/api/check', { method: 'POST', body: { hash } });
 check('reports an unregistered game as free', free.status === 200 && free.payload.taken === false, free.payload);
 
 // Registering it.
-const added = await call('/api/entries', { method: 'POST', body: { hash, comment: 'from Ivan, for Dad' } });
-check('registers a game', added.status === 201 && added.payload.entry.comment === 'from Ivan, for Dad', added.payload);
-check('reports no duplicates on a first registration', added.payload?.duplicates?.length === 0, added.payload);
+const added = await call('/api/entries', { method: 'POST', body: { hash, comment: 'от Ивана, для папы' } });
+check('registers a game', added.status === 201 && added.payload.entry.comment === 'от Ивана, для папы', added.payload);
 
 const taken = await call('/api/check', { method: 'POST', body: { hash } });
 check('reports a registered game as taken', taken.status === 200 && taken.payload.taken === true, taken.payload);
-check('returns the note with the match', taken.payload?.entries?.[0]?.comment === 'from Ivan, for Dad', taken.payload);
+check('returns the note with the match', taken.payload?.entries?.[0]?.comment === 'от Ивана, для папы', taken.payload);
 
-// A second registration of the same game warns about the first.
-const again = await call('/api/entries', { method: 'POST', body: { hash, comment: 'from Anna' } });
-check('warns about duplicates on a repeat registration', again.payload?.duplicates?.length === 1, again.payload);
+// The second attempt must be refused, and must not touch the first note.
+const duplicate = await call('/api/entries', { method: 'POST', body: { hash, comment: 'от Анны' } });
+check('refuses a duplicate registration', duplicate.status === 409, duplicate.payload);
+check('returns the existing note with the refusal', duplicate.payload?.entries?.[0]?.comment === 'от Ивана, для папы', duplicate.payload);
 
-const after = await call('/api/stats');
-check('counts both registrations', after.payload.count === before.payload.count + 2, {
+const unchanged = await call('/api/check', { method: 'POST', body: { hash } });
+check('leaves the original note untouched', unchanged.payload?.entries?.[0]?.comment === 'от Ивана, для папы', unchanged.payload);
+check('stores exactly one row per game', unchanged.payload?.entries?.length === 1, unchanged.payload);
+
+const afterAdd = await call('/api/stats');
+check('counts one registration', afterAdd.payload.count === before.payload.count + 1, {
     before: before.payload,
-    after: after.payload,
+    after: afterAdd.payload,
 });
 
-// Removing them again.
-check('removes an entry', (await call(`/api/entries/${added.payload.entry.id}`, { method: 'DELETE' })).status === 200);
+// Removing it by name.
+const removed = await call('/api/entries', { method: 'DELETE', body: { hash } });
+check('removes a registered game', removed.status === 200 && removed.payload.deleted === 1, removed.payload);
 check(
     'reports a repeated removal as missing',
-    (await call(`/api/entries/${added.payload.entry.id}`, { method: 'DELETE' })).status === 404,
+    (await call('/api/entries', { method: 'DELETE', body: { hash } })).status === 404,
 );
-check('removes the second entry', (await call(`/api/entries/${again.payload.entry.id}`, { method: 'DELETE' })).status === 200);
 
 const final = await call('/api/stats');
 check('restores the original count', final.payload.count === before.payload.count, final.payload);

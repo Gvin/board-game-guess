@@ -12,6 +12,7 @@
     --taken: #9a5b00;
     --taken-bg: #fdf1dd;
     --error: #b3261e;
+    --error-text: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,10 +29,14 @@
         --taken: #e3b169;
         --taken-bg: #322613;
         --error: #f28079;
+        --error-text: #1a0f0e;
     }
 }
 
 * { box-sizing: border-box; }
+
+/* why: a `display` rule below would otherwise outrank the browser's own [hidden] rule. */
+[hidden] { display: none !important; }
 
 body {
     margin: 0;
@@ -53,12 +58,17 @@ body {
     margin-top: 2rem;
 }
 
+.screen { display: flex; flex-direction: column; gap: 1rem; }
+
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: .75rem;
     padding: 1.25rem;
 }
+
+.card h2 { margin: 0 0 .25rem; font-size: 1.1rem; }
+.card > .small { margin: 0 0 1rem; }
 
 .stack { display: flex; flex-direction: column; gap: .75rem; }
 .stack > * { margin: 0; }
@@ -102,6 +112,12 @@ input:focus-visible, button:focus-visible {
     color: var(--accent-text);
 }
 
+.button--danger {
+    background: var(--error);
+    border-color: var(--error);
+    color: var(--error-text);
+}
+
 .link {
     padding: 0;
     border: 0;
@@ -113,35 +129,70 @@ input:focus-visible, button:focus-visible {
     cursor: pointer;
 }
 
+/* The three actions. */
+.tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .4rem;
+    padding: .35rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: .75rem;
+}
+
+.tab {
+    padding: .6rem .5rem;
+    border: 0;
+    border-radius: .5rem;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.tab:hover:not(.is-active) { color: var(--text); }
+
+.tab.is-active {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+#hint { margin: 0 0 1rem; }
+
 .banner {
-    display: flex;
-    flex-direction: column;
-    gap: .15rem;
     padding: .9rem 1rem;
     border-radius: .5rem;
-    margin-bottom: 1rem;
+    margin: 0 0 .75rem;
+    font-weight: 600;
 }
 
 .banner--free { background: var(--free-bg); color: var(--free); }
 .banner--taken { background: var(--taken-bg); color: var(--taken); }
-.banner span { color: inherit; opacity: .85; }
-
-.entries { list-style: none; margin: 0 0 1rem; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.banner--found { background: var(--bg); color: var(--text); }
 
 .entry {
     display: flex;
     align-items: baseline;
+    justify-content: space-between;
     gap: .75rem;
     padding: .6rem .8rem;
     border: 1px solid var(--border);
     border-radius: .5rem;
+    margin-bottom: .5rem;
 }
 
 .entry__comment { flex: 1; }
 .entry__date { color: var(--muted); font-size: .8rem; white-space: nowrap; }
 
+.confirm {
+    border-top: 1px solid var(--border);
+    margin-top: 1rem;
+    padding-top: 1rem;
+}
+
+.confirm__question { margin: 0 0 .75rem; font-weight: 600; }
+.confirm__actions { display: flex; gap: .5rem; }
+
 .message { padding: .75rem 1rem; border-radius: .5rem; font-size: .9rem; }
 .message--error { background: var(--surface); border: 1px solid var(--error); color: var(--error); }
-.message--success { background: var(--free-bg); color: var(--free); }
-
-.add-form { border-top: 1px solid var(--border); padding-top: 1rem; }

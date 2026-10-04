@@ -2,7 +2,8 @@
  * API for the board game gift register.
  *
  * The client hashes a normalised game name and only ever sends the digest, so this Worker
- * and its D1 database never see a real game name.
+ * and its D1 database never see a real game name. Error messages are Russian because the
+ * page shows them to the user as they are.
  */
 
 interface Env {
@@ -35,14 +36,14 @@ export default {
         }
 
         if (!isAuthorised(request, env)) {
-            return json({ error: 'Wrong passphrase.' }, 401);
+            return json({ error: 'Неверный пароль.' }, 401);
         }
 
         try {
             return await route(request, env, url);
         } catch (error) {
             console.error('Unhandled API error', error);
-            return json({ error: 'Something went wrong.' }, 500);
+            return json({ error: 'Что-то пошло не так.' }, 500);
         }
     },
 } satisfies ExportedHandler<Env>;
@@ -58,68 +59,85 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
         return await handleAdd(request, env);
     }
 
+    if (pathname === '/api/entries' && request.method === 'DELETE') {
+        return await handleRemove(request, env);
+    }
+
     if (pathname === '/api/stats' && request.method === 'GET') {
         return await handleStats(env);
     }
 
-    const deleteMatch = pathname.match(/^\/api\/entries\/(\d+)$/);
-    if (deleteMatch && request.method === 'DELETE') {
-        return await handleDelete(env, Number(deleteMatch[1]));
-    }
-
-    return json({ error: 'Not found.' }, 404);
+    return json({ error: 'Не найдено.' }, 404);
 }
 
 async function handleCheck(request: Request, env: Env): Promise<Response> {
-    const body = await readJson(request);
-    const hash = readHash(body);
+    const hash = readHash(await readJson(request));
     if (hash === null) {
-        return json({ error: 'A valid game hash is required.' }, 400);
+        return json({ error: 'Некорректный запрос.' }, 400);
     }
 
     const entries = await findByHash(env, hash);
     return json({ taken: entries.length > 0, entries });
 }
 
+/** Refuses to touch a game that is already registered, so an existing note is never lost. */
 async function handleAdd(request: Request, env: Env): Promise<Response> {
     const body = await readJson(request);
     const hash = readHash(body);
     if (hash === null) {
-        return json({ error: 'A valid game hash is required.' }, 400);
+        return json({ error: 'Некорректный запрос.' }, 400);
     }
 
     const comment = typeof body?.comment === 'string' ? body.comment.trim() : '';
     if (comment.length > MAX_COMMENT_LENGTH) {
-        return json({ error: `The note must be ${MAX_COMMENT_LENGTH} characters or fewer.` }, 400);
+        return json({ error: `Комментарий длиннее ${MAX_COMMENT_LENGTH} символов.` }, 400);
     }
 
-    const duplicates = await findByHash(env, hash);
-
-    const created = await env.DB.prepare(
-        'INSERT INTO entries (game_hash, comment) VALUES (?, ?) RETURNING id, comment, created_at',
-    )
-        .bind(hash, comment)
-        .first<EntryRow>();
-
-    if (created === null) {
-        return json({ error: 'The entry could not be saved.' }, 500);
+    const existing = await findByHash(env, hash);
+    if (existing.length > 0) {
+        return json({ error: 'Эта игра уже есть в списке.', entries: existing }, 409);
     }
 
-    return json({ entry: toEntry(created), duplicates }, 201);
+    try {
+        const created = await env.DB.prepare(
+            'INSERT INTO entries (game_hash, comment) VALUES (?, ?) RETURNING id, comment, created_at',
+        )
+            .bind(hash, comment)
+            .first<EntryRow>();
+
+        if (created === null) {
+            return json({ error: 'Не удалось сохранить запись.' }, 500);
+        }
+
+        return json({ entry: toEntry(created) }, 201);
+    } catch (error) {
+        // why: the unique index is the real guard, so two simultaneous adds land here.
+        const raced = await findByHash(env, hash);
+        if (raced.length > 0) {
+            return json({ error: 'Эта игра уже есть в списке.', entries: raced }, 409);
+        }
+
+        throw error;
+    }
+}
+
+async function handleRemove(request: Request, env: Env): Promise<Response> {
+    const hash = readHash(await readJson(request));
+    if (hash === null) {
+        return json({ error: 'Некорректный запрос.' }, 400);
+    }
+
+    const result = await env.DB.prepare('DELETE FROM entries WHERE game_hash = ?').bind(hash).run();
+    if (result.meta.changes === 0) {
+        return json({ error: 'Такой игры нет в списке.' }, 404);
+    }
+
+    return json({ deleted: result.meta.changes });
 }
 
 async function handleStats(env: Env): Promise<Response> {
     const row = await env.DB.prepare('SELECT COUNT(*) AS count FROM entries').first<{ count: number }>();
     return json({ count: row?.count ?? 0 });
-}
-
-async function handleDelete(env: Env, id: number): Promise<Response> {
-    const result = await env.DB.prepare('DELETE FROM entries WHERE id = ?').bind(id).run();
-    if (result.meta.changes === 0) {
-        return json({ error: 'That entry no longer exists.' }, 404);
-    }
-
-    return json({ deleted: id });
 }
 
 async function findByHash(env: Env, hash: string): Promise<Entry[]> {

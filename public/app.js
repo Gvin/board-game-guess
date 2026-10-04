@@ -5,28 +5,52 @@
  * digest is sent to the API.
  */
 
-const STORAGE_KEY = 'bgg.passphrase';
+const STORAGE_KEY = 'bgg.password';
+
+const MODES = {
+    check: {
+        submit: 'Проверить',
+        hint: 'Узнайте, есть ли игра в списке, и кто её уже взял.',
+        needsComment: false,
+    },
+    add: {
+        submit: 'Добавить',
+        hint: 'Добавьте игру в список, чтобы её не купил кто-то ещё.',
+        needsComment: true,
+    },
+    remove: {
+        submit: 'Найти',
+        hint: 'Уберите игру из списка, если подарок отменился.',
+        needsComment: false,
+    },
+};
 
 const elements = {
-    lock: document.getElementById('lock'),
-    lockForm: document.getElementById('lock-form'),
-    lockError: document.getElementById('lock-error'),
-    passphrase: document.getElementById('passphrase'),
-    main: document.getElementById('main'),
-    checkForm: document.getElementById('check-form'),
+    login: document.getElementById('login'),
+    loginForm: document.getElementById('login-form'),
+    loginError: document.getElementById('login-error'),
+    password: document.getElementById('password'),
+    workspace: document.getElementById('workspace'),
+    tabs: document.getElementById('tabs'),
+    hint: document.getElementById('hint'),
+    actionForm: document.getElementById('action-form'),
+    actionSubmit: document.getElementById('action-submit'),
     game: document.getElementById('game'),
     normalised: document.getElementById('normalised'),
+    commentField: document.getElementById('comment-field'),
+    comment: document.getElementById('comment'),
     result: document.getElementById('result'),
     error: document.getElementById('error'),
     stats: document.getElementById('stats'),
-    forget: document.getElementById('forget'),
+    logout: document.getElementById('logout'),
 };
 
-let passphrase = readPassphraseFromUrl() ?? localStorage.getItem(STORAGE_KEY);
+let password = readPasswordFromUrl() ?? localStorage.getItem(STORAGE_KEY);
+let mode = 'check';
 
 class AuthError extends Error {}
 
-/** Strips accents, case and punctuation so "Kingdomino!" and "kingdomino" hash the same. */
+/** Strips accents, case and punctuation so "Каркассон!" and "каркассон" hash the same. */
 function normalise(name) {
     return name
         .normalize('NFKD')
@@ -44,14 +68,14 @@ async function hashName(name) {
         .join('');
 }
 
-function readPassphraseFromUrl() {
+function readPasswordFromUrl() {
     const fragment = new URLSearchParams(location.hash.slice(1));
     const key = fragment.get('key');
     if (key === null) {
         return null;
     }
 
-    // why: keep the passphrase out of the address bar, history and any link the user copies.
+    // why: keep the password out of the address bar, history and any link the user copies.
     history.replaceState(null, '', location.pathname + location.search);
     localStorage.setItem(STORAGE_KEY, key);
     return key;
@@ -62,20 +86,16 @@ async function api(path, options = {}) {
         ...options,
         headers: {
             ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-            Authorization: `Bearer ${passphrase ?? ''}`,
+            Authorization: `Bearer ${password ?? ''}`,
         },
     });
 
     if (response.status === 401) {
-        throw new AuthError('Wrong passphrase.');
+        throw new AuthError('Неверный пароль.');
     }
 
     const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-        throw new Error(payload?.error ?? `Request failed (${response.status}).`);
-    }
-
-    return payload;
+    return { status: response.status, ok: response.ok, payload };
 }
 
 function show(element, visible) {
@@ -91,115 +111,116 @@ function clearError() {
     show(elements.error, false);
 }
 
+function clearResult() {
+    elements.result.replaceChildren();
+    show(elements.result, false);
+}
+
 function formatDate(iso) {
     const date = new Date(iso.endsWith('Z') ? iso : `${iso}Z`);
-    return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString();
-}
-
-function renderEntries(list, entries) {
-    list.replaceChildren();
-
-    for (const entry of entries) {
-        const item = document.createElement('li');
-        item.className = 'entry';
-
-        const comment = document.createElement('span');
-        comment.className = 'entry__comment';
-        comment.textContent = entry.comment || 'No note left';
-        if (!entry.comment) {
-            comment.classList.add('muted');
-        }
-
-        const date = document.createElement('span');
-        date.className = 'entry__date';
-        date.textContent = formatDate(entry.createdAt);
-
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'link';
-        remove.textContent = 'Remove';
-        remove.addEventListener('click', () => deleteEntry(entry, item, remove));
-
-        item.append(comment, date, remove);
-        list.append(item);
-    }
-}
-
-async function deleteEntry(entry, item, button) {
-    if (!confirm('Remove this registration?')) {
-        return;
-    }
-
-    button.disabled = true;
-    try {
-        await api(`/entries/${entry.id}`, { method: 'DELETE' });
-        item.remove();
-        await refreshStats();
-    } catch (error) {
-        button.disabled = false;
-        handle(error);
-    }
-}
-
-function buildAddForm(hash, label) {
-    const form = document.getElementById('tpl-add').content.cloneNode(true).querySelector('form');
-    const comment = form.querySelector('.add-form__comment');
-    const submit = form.querySelector('button');
-    submit.textContent = label;
-
-    form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        submit.disabled = true;
-        clearError();
-
-        try {
-            await api('/entries', {
-                method: 'POST',
-                body: JSON.stringify({ hash, comment: comment.value }),
-            });
-
-            elements.result.replaceChildren(banner('success', 'Registered. Nobody else will buy it by accident now.'));
-            elements.game.value = '';
-            elements.normalised.textContent = '';
-            await refreshStats();
-        } catch (error) {
-            submit.disabled = false;
-            handle(error);
-        }
-    });
-
-    return form;
+    return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString('ru-RU');
 }
 
 function banner(kind, text) {
     const element = document.createElement('p');
-    element.className = `message message--${kind}`;
+    element.className = `banner banner--${kind}`;
     element.textContent = text;
     return element;
 }
 
-async function check(name) {
-    const hash = await hashName(name);
-    const { taken, entries } = await api('/check', {
-        method: 'POST',
-        body: JSON.stringify({ hash }),
-    });
-
-    const template = document.getElementById(taken ? 'tpl-taken' : 'tpl-free');
-    const fragment = template.content.cloneNode(true);
-
-    if (taken) {
-        renderEntries(fragment.querySelector('.entries'), entries);
+function entryCard(entry) {
+    const node = document.getElementById('tpl-entry').content.cloneNode(true);
+    const comment = node.querySelector('.entry__comment');
+    comment.textContent = entry.comment || 'без комментария';
+    if (!entry.comment) {
+        comment.classList.add('muted');
     }
 
-    elements.result.replaceChildren(fragment, buildAddForm(hash, taken ? 'Register anyway' : 'Register this game'));
+    node.querySelector('.entry__date').textContent = `добавлено ${formatDate(entry.createdAt)}`;
+    return node;
+}
+
+function render(...nodes) {
+    elements.result.replaceChildren(...nodes);
     show(elements.result, true);
+}
+
+async function runCheck(hash) {
+    const { payload } = await api('/check', { method: 'POST', body: JSON.stringify({ hash }) });
+
+    if (!payload.taken) {
+        render(banner('free', 'Этой игры ещё нет в списке — можно покупать.'));
+        return;
+    }
+
+    render(banner('taken', 'Эта игра уже в списке.'), ...payload.entries.map(entryCard));
+}
+
+async function runAdd(hash) {
+    const { status, ok, payload } = await api('/entries', {
+        method: 'POST',
+        body: JSON.stringify({ hash, comment: elements.comment.value }),
+    });
+
+    if (status === 409) {
+        render(
+            banner('taken', 'Эта игра уже есть в списке. Ничего не изменилось.'),
+            ...payload.entries.map(entryCard),
+        );
+        return;
+    }
+
+    if (!ok) {
+        showError(payload?.error ?? 'Не удалось добавить игру.');
+        return;
+    }
+
+    render(banner('free', 'Игра добавлена в список.'), entryCard(payload.entry));
+    elements.game.value = '';
+    elements.comment.value = '';
+    elements.normalised.textContent = '';
+    await refreshStats();
+}
+
+async function runRemove(hash) {
+    const { payload } = await api('/check', { method: 'POST', body: JSON.stringify({ hash }) });
+
+    if (!payload.taken) {
+        render(banner('taken', 'Такой игры нет в списке — удалять нечего.'));
+        return;
+    }
+
+    const confirmation = document.getElementById('tpl-confirm').content.cloneNode(true);
+    const confirm = confirmation.querySelector('[data-action="confirm"]');
+    const cancel = confirmation.querySelector('[data-action="cancel"]');
+
+    confirm.addEventListener('click', async () => {
+        confirm.disabled = true;
+        cancel.disabled = true;
+
+        const removal = await api('/entries', { method: 'DELETE', body: JSON.stringify({ hash }) });
+        if (!removal.ok) {
+            showError(removal.payload?.error ?? 'Не удалось удалить запись.');
+            return;
+        }
+
+        render(banner('free', 'Запись удалена.'));
+        elements.game.value = '';
+        elements.normalised.textContent = '';
+        await refreshStats();
+    });
+
+    cancel.addEventListener('click', () => {
+        clearResult();
+    });
+
+    render(banner('found', 'Найдена запись:'), ...payload.entries.map(entryCard), confirmation);
 }
 
 async function refreshStats() {
     try {
-        const { count } = await api('/stats');
-        elements.stats.textContent = count === 1 ? '1 game registered' : `${count} games registered`;
+        const { payload } = await api('/stats');
+        elements.stats.textContent = `Игр в списке: ${payload.count}`;
     } catch (error) {
         if (error instanceof AuthError) {
             handle(error);
@@ -209,82 +230,114 @@ async function refreshStats() {
 
 function handle(error) {
     if (error instanceof AuthError) {
-        lock('That passphrase was not accepted.');
+        lock('Пароль больше не подходит. Войдите снова.');
         return;
     }
 
     showError(error.message);
 }
 
-function lock(message) {
-    passphrase = null;
-    localStorage.removeItem(STORAGE_KEY);
-    show(elements.main, false);
-    show(elements.forget, false);
-    show(elements.lock, true);
-    elements.stats.textContent = '';
+function setMode(next) {
+    mode = next;
+    const config = MODES[next];
 
-    if (message) {
-        elements.lockError.textContent = message;
-        show(elements.lockError, true);
+    for (const tab of elements.tabs.querySelectorAll('.tab')) {
+        tab.classList.toggle('is-active', tab.dataset.mode === next);
     }
 
-    elements.passphrase.focus();
+    elements.hint.textContent = config.hint;
+    elements.actionSubmit.textContent = config.submit;
+    show(elements.commentField, config.needsComment);
+    clearResult();
+    clearError();
+    elements.game.focus();
+}
+
+function lock(message) {
+    password = null;
+    localStorage.removeItem(STORAGE_KEY);
+    show(elements.workspace, false);
+    show(elements.logout, false);
+    show(elements.login, true);
+    elements.stats.textContent = '';
+    clearResult();
+    clearError();
+
+    if (message) {
+        elements.loginError.textContent = message;
+        show(elements.loginError, true);
+    }
+
+    elements.password.focus();
 }
 
 function unlock() {
-    show(elements.lock, false);
-    show(elements.lockError, false);
-    show(elements.main, true);
-    show(elements.forget, true);
-    elements.game.focus();
+    show(elements.login, false);
+    show(elements.loginError, false);
+    show(elements.workspace, true);
+    show(elements.logout, true);
+    setMode('check');
     void refreshStats();
 }
 
-elements.lockForm.addEventListener('submit', async (event) => {
+elements.loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    passphrase = elements.passphrase.value;
+    password = elements.password.value;
 
     try {
         await api('/stats');
-        localStorage.setItem(STORAGE_KEY, passphrase);
-        elements.passphrase.value = '';
+        localStorage.setItem(STORAGE_KEY, password);
+        elements.password.value = '';
         unlock();
     } catch (error) {
         handle(error);
     }
 });
 
-elements.checkForm.addEventListener('submit', async (event) => {
+elements.tabs.addEventListener('click', (event) => {
+    const tab = event.target.closest('.tab');
+    if (tab !== null) {
+        setMode(tab.dataset.mode);
+    }
+});
+
+elements.actionForm.addEventListener('submit', async (event) => {
     event.preventDefault();
+
     const name = elements.game.value.trim();
     if (normalise(name) === '') {
-        showError('Type a game name first.');
+        showError('Введите название игры.');
         return;
     }
 
-    const submit = elements.checkForm.querySelector('button');
-    submit.disabled = true;
+    elements.actionSubmit.disabled = true;
     clearError();
-    show(elements.result, false);
+    clearResult();
 
     try {
-        await check(name);
+        const hash = await hashName(name);
+        if (mode === 'check') {
+            await runCheck(hash);
+        } else if (mode === 'add') {
+            await runAdd(hash);
+        } else {
+            await runRemove(hash);
+        }
     } catch (error) {
         handle(error);
     } finally {
-        submit.disabled = false;
+        elements.actionSubmit.disabled = false;
     }
 });
 
 elements.game.addEventListener('input', () => {
     const normalisedName = normalise(elements.game.value);
-    elements.normalised.textContent = normalisedName === '' ? '' : `Matched as: ${normalisedName}`;
+    elements.normalised.textContent = normalisedName === '' ? '' : `Сопоставляется как: ${normalisedName}`;
 });
 
-elements.forget.addEventListener('click', () => lock(''));
+elements.logout.addEventListener('click', () => lock(''));
 
-if (passphrase) {
+if (password) {
     unlock();
 } else {
     lock('');

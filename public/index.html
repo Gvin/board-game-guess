@@ -1,38 +1,56 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>Board Game Gift Register</title>
+    <title>Реестр подарков</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#127922;</text></svg>" />
     <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
 <main class="app">
     <header class="app__header">
-        <h1>🎲 Board Game Gift Register</h1>
-        <p class="muted">Check a game before you buy it, so nobody gets the same present twice.</p>
+        <h1>🎲 Реестр подарков</h1>
+        <p class="muted">Проверьте настольную игру перед покупкой, чтобы никто не подарил одно и то же дважды.</p>
     </header>
 
-    <section id="lock" class="card" hidden>
-        <h2>Passphrase</h2>
-        <p class="muted">Ask whoever set this up for the family passphrase.</p>
-        <form id="lock-form" class="stack">
-            <input id="passphrase" type="password" autocomplete="current-password" placeholder="Passphrase" required />
-            <button type="submit" class="button button--primary">Unlock</button>
-        </form>
-        <p id="lock-error" class="message message--error" hidden></p>
+    <!-- Screen 1: nothing else is rendered until the password is accepted. -->
+    <section id="login" class="screen" hidden>
+        <div class="card">
+            <h2>Вход</h2>
+            <p class="muted small">Введите общий пароль — его знают только дарители.</p>
+            <form id="login-form" class="stack">
+                <label for="password">Пароль</label>
+                <input id="password" type="password" autocomplete="current-password" placeholder="Общий пароль" required />
+                <button type="submit" class="button button--primary">Войти</button>
+            </form>
+            <p id="login-error" class="message message--error" hidden></p>
+        </div>
     </section>
 
-    <section id="main" class="stack" hidden>
+    <!-- Screen 2: the three actions. -->
+    <section id="workspace" class="screen" hidden>
+        <nav class="tabs" id="tabs">
+            <button type="button" class="tab is-active" data-mode="check">Проверить</button>
+            <button type="button" class="tab" data-mode="add">Добавить</button>
+            <button type="button" class="tab" data-mode="remove">Удалить</button>
+        </nav>
+
         <div class="card">
-            <form id="check-form" class="stack">
-                <label for="game">Board game name</label>
+            <p id="hint" class="muted small"></p>
+            <form id="action-form" class="stack">
+                <label for="game">Название игры</label>
                 <input id="game" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
-                       placeholder="e.g. Ticket to Ride" required />
+                       placeholder="например, Каркассон" required />
                 <p id="normalised" class="muted small"></p>
-                <button type="submit" class="button button--primary">Check</button>
+
+                <div id="comment-field" class="stack" hidden>
+                    <label for="comment">Комментарий</label>
+                    <input id="comment" type="text" maxlength="200" placeholder="например, Иван, игра 3" />
+                </div>
+
+                <button id="action-submit" type="submit" class="button button--primary">Проверить</button>
             </form>
         </div>
 
@@ -42,30 +60,25 @@
 
     <footer class="app__footer muted small">
         <span id="stats"></span>
-        <button id="forget" type="button" class="link" hidden>Forget passphrase</button>
+        <button id="logout" type="button" class="link" hidden>Выйти</button>
     </footer>
 </main>
 
-<template id="tpl-free">
-    <div class="banner banner--free">
-        <strong>Nobody has registered this yet.</strong>
-        <span class="muted">You are clear to buy it.</span>
+<template id="tpl-entry">
+    <div class="entry">
+        <span class="entry__comment"></span>
+        <span class="entry__date"></span>
     </div>
 </template>
 
-<template id="tpl-taken">
-    <div class="banner banner--taken">
-        <strong>Careful — this game is already registered.</strong>
+<template id="tpl-confirm">
+    <div class="confirm">
+        <p class="confirm__question">Удалить эту запись?</p>
+        <div class="confirm__actions">
+            <button type="button" class="button button--danger" data-action="confirm">Удалить</button>
+            <button type="button" class="button" data-action="cancel">Отмена</button>
+        </div>
     </div>
-    <ul class="entries"></ul>
-</template>
-
-<template id="tpl-add">
-    <form class="stack add-form">
-        <label>Who is it from / for? <span class="muted">(stored as plain text)</span></label>
-        <input class="add-form__comment" type="text" maxlength="200" placeholder="e.g. from Ivan, for Dad" />
-        <button type="submit" class="button"></button>
-    </form>
 </template>
 
 <script type="module" src="/app.js"></script>
