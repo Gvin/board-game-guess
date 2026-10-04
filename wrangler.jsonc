@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "board-game-guess",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "board-game-guess",
+      "database_id": "3e948aea-9763-4d38-9bfd-db89d7f1d2ca",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

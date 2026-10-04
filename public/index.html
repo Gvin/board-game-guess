@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Board Game Gift Register</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#127922;</text></svg>" />
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main class="app">
+    <header class="app__header">
+        <h1>🎲 Board Game Gift Register</h1>
+        <p class="muted">Check a game before you buy it, so nobody gets the same present twice.</p>
+    </header>
+
+    <section id="lock" class="card" hidden>
+        <h2>Passphrase</h2>
+        <p class="muted">Ask whoever set this up for the family passphrase.</p>
+        <form id="lock-form" class="stack">
+            <input id="passphrase" type="password" autocomplete="current-password" placeholder="Passphrase" required />
+            <button type="submit" class="button button--primary">Unlock</button>
+        </form>
+        <p id="lock-error" class="message message--error" hidden></p>
+    </section>
+
+    <section id="main" class="stack" hidden>
+        <div class="card">
+            <form id="check-form" class="stack">
+                <label for="game">Board game name</label>
+                <input id="game" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+                       placeholder="e.g. Ticket to Ride" required />
+                <p id="normalised" class="muted small"></p>
+                <button type="submit" class="button button--primary">Check</button>
+            </form>
+        </div>
+
+        <div id="result" class="card" hidden></div>
+        <p id="error" class="message message--error" hidden></p>
+    </section>
+
+    <footer class="app__footer muted small">
+        <span id="stats"></span>
+        <button id="forget" type="button" class="link" hidden>Forget passphrase</button>
+    </footer>
+</main>
+
+<template id="tpl-free">
+    <div class="banner banner--free">
+        <strong>Nobody has registered this yet.</strong>
+        <span class="muted">You are clear to buy it.</span>
+    </div>
+</template>
+
+<template id="tpl-taken">
+    <div class="banner banner--taken">
+        <strong>Careful — this game is already registered.</strong>
+    </div>
+    <ul class="entries"></ul>
+</template>
+
+<template id="tpl-add">
+    <form class="stack add-form">
+        <label>Who is it from / for? <span class="muted">(stored as plain text)</span></label>
+        <input class="add-form__comment" type="text" maxlength="200" placeholder="e.g. from Ivan, for Dad" />
+        <button type="submit" class="button"></button>
+    </form>
+</template>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
